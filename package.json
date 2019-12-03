@@ -1,6 +1,6 @@
 {
   "name": "react-simple-form-state",
-  "version": "0.0.1",
+  "version": "0.1.1",
   "description": "Simple form state for react",
   "main": "index.js",
   "scripts": {
@@ -11,6 +11,7 @@
     "form",
     "state"
   ],
+  "repository": "claudiosikeda/react-simple-form-state",
   "author": "Claudio Ikeda",
   "license": "ISC",
   "dependencies": {
