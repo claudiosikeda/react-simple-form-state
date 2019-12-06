@@ -1,3 +1,5 @@
+import _ from 'lodash'
+
 const handler = {
   get: (target, prop) => {
     if (prop === '__GET_TARGET__') {
@@ -5,7 +7,7 @@ const handler = {
     }
 
     let value = ''
-    const model = target[prop]
+    const model = _.get(target, prop)
     if (model !== undefined) {
       value = typeof model === 'object' ? model.default : model
     }

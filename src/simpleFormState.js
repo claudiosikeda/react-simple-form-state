@@ -1,58 +1,86 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import baseProxy from './baseProxy'
 import { validateState, validateField } from './validator'
+import dot from 'dot-object'
+import _ from 'lodash'
 
-export function useSimpleFormState (state) {
-  let baseModel = baseProxy(state)
+export function useSimpleFormState (config) {
 
-  const getStateValues = (state) => {
+  const setState = (prop, value = '') => {
+    if (typeof prop === 'string') {
+      baseModel[prop] = value
+    }
+
+    if (typeof prop === 'object') {
+      Object.entries(prop).forEach((item) => {
+        let [key, value] = item
+        baseModel[key] = value
+      })
+    }
+
+    setData(_getStateValues(baseModel.__GET_TARGET__))
+  }
+
+  const validate = (name = '') => {
+    if (!name) {
+      return _validateAll(config)
+    }
+
+    return _validateItem(name, config)
+  }
+
+  const _getState = () => {
+    return dot.object({ ...data })
+  }
+
+  const _getErrors = () => {
+    return errors
+  }
+
+  const _getStateValues = (state) => {
     let stateValues = {}
 
     Object.entries(state).forEach((item) => {
       let [key, value] = item
-      stateValues[key] = typeof value === 'object' ? value.default : value
+      if (typeof value === 'object' && [null, undefined].includes(value.default)) {
+        value = _getStateValues(value)
+      } else {
+        value = typeof value === 'object' ? value.default : value
+      }
+
+      stateValues[key] = value
     })
 
-    return stateValues
+    return dot.dot(stateValues)
   }
 
-  const getState = () => {
-    return { state: data, errors: errors }
-  }
-
-  const setState = (name, value) => {
-    baseModel[name] = value
-    setData(getStateValues(baseModel.__GET_TARGET__))
-  }
-
-  const validate = (name = '') => {
-    const target = baseModel.__GET_TARGET__
-
-    if (!name) {
-      return validateAll(target)
-    }
-
-    return validateItem(name, target)
-  }
-
-  const validateAll = state => {
+  const _validateAll = state => {
     let validationErrors = validateState(state)
-
     setErrors(validationErrors)
   }
 
-  const validateItem = (name, state) => {
-    const item = state[name]
+  const _validateItem = (name, state) => {
+    const item = _.get(state, name)
 
-    if (item) {
-      return validateField(item)
+    if (item && item.validate) {
+      let validationErrors = validateField(item)
+
+      if (validationErrors.length) {
+        setErrors({...errors, [name]: validationErrors})
+      } else {
+        delete errors[name]
+        setErrors({...errors})
+      }
+
+      return validationErrors
     }
 
     return []
   }
 
-  const [data, setData] = useState(getStateValues(state))
+  const baseModel = baseProxy(config)
+  const [data, setData] = useState(_getStateValues(config))
   const [errors, setErrors] = useState({})
-  return [baseModel, setState, getState, validate]
+  return [baseModel, { setState, validate, state: _getState, errors: _getErrors }]
 }
 
