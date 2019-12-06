@@ -1,4 +1,4 @@
-import validations from './validations'
+import rules from './rules'
 
 export const validateState = state => {
   let validationErrors = {}
@@ -7,9 +7,14 @@ export const validateState = state => {
     let item = state[key]
 
     if (typeof item === 'object') {
-      let errors = validateField(item)
-      if (errors.length) {
-        validationErrors[key] = errors
+      if (item.validate) {
+        let errors = validateField(item)
+
+        if (errors.length) {
+          validationErrors[key] = errors
+        }
+      } else {
+        validationErrors[key] = validateState(item)
       }
     }
   })
@@ -20,14 +25,10 @@ export const validateState = state => {
 export const validateField = item => {
   let errors = []
 
-  Object.keys(item).forEach(key => {
-    let validation = item[key]
-    let rule = validations[key]
-
-    if (typeof validation !== 'default' && rule) {
-      if (rule(item)) {
-        errors.push(item[key].message)
-      }
+  Object.keys(item.validate).forEach(validation => {
+    let rule = rules(validation)
+    if (!rule.valid(item)) {
+      errors.push(item.validate[validation].message)
     }
   })
 
