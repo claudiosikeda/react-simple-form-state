@@ -8,16 +8,16 @@ const handler = {
 
     let value = ''
     const model = _.get(target, prop)
-    if (model !== undefined) {
-      value = typeof model === 'object' ? model.default : model
+    if (!_.isUndefined(model)) {
+      value = _.isObject(model) ? model.default : model
     }
 
     return value
   },
 
   set: (target, property, value) => {
-    const model = target[property]
-    if (typeof model === 'object') {
+    const model = _.get(target, property)
+    if (_.isObject(model)) {
       value = { ...model, default: value || '' }
     }
 
@@ -28,4 +28,3 @@ const handler = {
 
 const baseProxy = state => { return new Proxy(state, handler) }
 export default baseProxy
-

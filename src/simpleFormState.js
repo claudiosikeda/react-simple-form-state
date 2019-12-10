@@ -7,11 +7,11 @@ import _ from 'lodash'
 export function useSimpleFormState (config) {
 
   const setState = (prop, value = '') => {
-    if (typeof prop === 'string') {
+    if (_.isString(prop)) {
       baseModel[prop] = value
     }
 
-    if (typeof prop === 'object') {
+    if (_.isObject(prop)) {
       Object.entries(prop).forEach((item) => {
         let [key, value] = item
         baseModel[key] = value
@@ -42,10 +42,10 @@ export function useSimpleFormState (config) {
 
     Object.entries(state).forEach((item) => {
       let [key, value] = item
-      if (typeof value === 'object' && [null, undefined].includes(value.default)) {
+      if (_.isObject(value) && !_.isNil(value) && _.isNil(value.default)) {
         value = _getStateValues(value)
       } else {
-        value = typeof value === 'object' ? value.default : value
+        value = _.isObject(value) ? value.default : value
       }
 
       stateValues[key] = value
@@ -78,9 +78,8 @@ export function useSimpleFormState (config) {
     return []
   }
 
-  const baseModel = baseProxy(config)
+  const [baseModel, setBaseModel] = useState(baseProxy(config))
   const [data, setData] = useState(_getStateValues(config))
   const [errors, setErrors] = useState({})
   return [baseModel, { setState, validate, state: _getState, errors: _getErrors }]
 }
-
