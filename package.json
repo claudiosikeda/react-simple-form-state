@@ -2,7 +2,7 @@
   "name": "react-simple-form-state",
   "version": "0.4.0",
   "description": "Simple form state for react",
-  "main": "dist/index.js",
+  "main": "dist/main.js",
   "scripts": {
     "build": "webpack --mode production",
     "test": "echo \"Error: no test specified\" && exit 1"
