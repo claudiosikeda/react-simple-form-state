@@ -4,7 +4,7 @@
   "description": "Simple form state for react",
   "main": "dist/main.js",
   "scripts": {
-    "build": "webpack --mode production",
+    "build": "rollup -c",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
@@ -26,8 +26,12 @@
     "@babel/core": "^7.7.7",
     "@babel/preset-env": "^7.7.7",
     "@babel/preset-react": "^7.7.4",
-    "babel-loader": "^8.0.6",
-    "webpack": "^4.41.4",
-    "webpack-cli": "^3.3.10"
+    "react": "^16.12.0",
+    "rollup": "^1.32.0",
+    "rollup-plugin-babel": "^4.3.3",
+    "rollup-plugin-commonjs": "^10.1.0",
+    "rollup-plugin-node-resolve": "^5.2.0",
+    "rollup-plugin-peer-deps-external": "^2.2.2",
+    "rollup-plugin-replace": "^2.2.0"
   }
 }

@@ -1,2 +1,1 @@
-import { useSimpleFormState } from './simpleFormState'
-export { useSimpleFormState }
+export { default as useSimpleFormState } from './simpleFormState'

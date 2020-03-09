@@ -26,5 +26,7 @@ const handler = {
   }
 }
 
-const baseProxy = state => { return new Proxy(state, handler) }
+const baseProxy = state => {
+  return new Proxy(state || {}, handler)
+}
 export default baseProxy
