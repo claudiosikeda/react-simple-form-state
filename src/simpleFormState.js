@@ -4,7 +4,7 @@ import { validateState, validateField } from './validator'
 import dot from 'dot-object'
 import _ from 'lodash'
 
-export function useSimpleFormState (config) {
+function useSimpleFormState (config) {
 
   const setState = (prop, value = '') => {
     if (_.isString(prop)) {
@@ -83,3 +83,5 @@ export function useSimpleFormState (config) {
   const [errors, setErrors] = useState({})
   return [baseModel, { setState, validate, state: _getState, errors: _getErrors }]
 }
+
+export default useSimpleFormState
