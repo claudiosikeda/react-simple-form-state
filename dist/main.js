@@ -70,7 +70,7 @@ function _objectSpread2(target) {
 }
 
 function _slicedToArray(arr, i) {
-  return _arrayWithHoles(arr) || _iterableToArrayLimit(arr, i) || _nonIterableRest();
+  return _arrayWithHoles(arr) || _iterableToArrayLimit(arr, i) || _unsupportedIterableToArray(arr, i) || _nonIterableRest();
 }
 
 function _arrayWithHoles(arr) {
@@ -78,10 +78,7 @@ function _arrayWithHoles(arr) {
 }
 
 function _iterableToArrayLimit(arr, i) {
-  if (!(Symbol.iterator in Object(arr) || Object.prototype.toString.call(arr) === "[object Arguments]")) {
-    return;
-  }
-
+  if (typeof Symbol === "undefined" || !(Symbol.iterator in Object(arr))) return;
   var _arr = [];
   var _n = true;
   var _d = false;
@@ -107,8 +104,25 @@ function _iterableToArrayLimit(arr, i) {
   return _arr;
 }
 
+function _unsupportedIterableToArray(o, minLen) {
+  if (!o) return;
+  if (typeof o === "string") return _arrayLikeToArray(o, minLen);
+  var n = Object.prototype.toString.call(o).slice(8, -1);
+  if (n === "Object" && o.constructor) n = o.constructor.name;
+  if (n === "Map" || n === "Set") return Array.from(o);
+  if (n === "Arguments" || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(n)) return _arrayLikeToArray(o, minLen);
+}
+
+function _arrayLikeToArray(arr, len) {
+  if (len == null || len > arr.length) len = arr.length;
+
+  for (var i = 0, arr2 = new Array(len); i < len; i++) arr2[i] = arr[i];
+
+  return arr2;
+}
+
 function _nonIterableRest() {
-  throw new TypeError("Invalid attempt to destructure non-iterable instance");
+  throw new TypeError("Invalid attempt to destructure non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method.");
 }
 
 var commonjsGlobal = typeof globalThis !== 'undefined' ? globalThis : typeof window !== 'undefined' ? window : typeof global !== 'undefined' ? global : typeof self !== 'undefined' ? self : {};
@@ -124,14 +138,15 @@ var lodash = createCommonjsModule(function (module, exports) {
   var undefined$1;
 
   /** Used as the semantic version number. */
-  var VERSION = '4.17.15';
+  var VERSION = '4.17.21';
 
   /** Used as the size to enable large array optimizations. */
   var LARGE_ARRAY_SIZE = 200;
 
   /** Error message constants. */
   var CORE_ERROR_TEXT = 'Unsupported core-js use. Try https://npms.io/search?q=ponyfill.',
-      FUNC_ERROR_TEXT = 'Expected a function';
+      FUNC_ERROR_TEXT = 'Expected a function',
+      INVALID_TEMPL_VAR_ERROR_TEXT = 'Invalid `variable` option passed into `_.template`';
 
   /** Used to stand-in for `undefined` hash values. */
   var HASH_UNDEFINED = '__lodash_hash_undefined__';
@@ -264,10 +279,11 @@ var lodash = createCommonjsModule(function (module, exports) {
   var reRegExpChar = /[\\^$.*+?()[\]{}|]/g,
       reHasRegExpChar = RegExp(reRegExpChar.source);
 
-  /** Used to match leading and trailing whitespace. */
-  var reTrim = /^\s+|\s+$/g,
-      reTrimStart = /^\s+/,
-      reTrimEnd = /\s+$/;
+  /** Used to match leading whitespace. */
+  var reTrimStart = /^\s+/;
+
+  /** Used to match a single whitespace character. */
+  var reWhitespace = /\s/;
 
   /** Used to match wrap detail comments. */
   var reWrapComment = /\{(?:\n\/\* \[wrapped with .+\] \*\/)?\n?/,
@@ -276,6 +292,18 @@ var lodash = createCommonjsModule(function (module, exports) {
 
   /** Used to match words composed of alphanumeric characters. */
   var reAsciiWord = /[^\x00-\x2f\x3a-\x40\x5b-\x60\x7b-\x7f]+/g;
+
+  /**
+   * Used to validate the `validate` option in `_.template` variable.
+   *
+   * Forbids characters which could potentially change the meaning of the function argument definition:
+   * - "()," (modification of function parameters)
+   * - "=" (default value)
+   * - "[]{}" (destructuring of function parameters)
+   * - "/" (beginning of a comment)
+   * - whitespace
+   */
+  var reForbiddenIdentifierChars = /[()=,{}\[\]\/\s]/;
 
   /** Used to match backslashes in property paths. */
   var reEscapeChar = /\\(\\)?/g;
@@ -1106,6 +1134,19 @@ var lodash = createCommonjsModule(function (module, exports) {
   }
 
   /**
+   * The base implementation of `_.trim`.
+   *
+   * @private
+   * @param {string} string The string to trim.
+   * @returns {string} Returns the trimmed string.
+   */
+  function baseTrim(string) {
+    return string
+      ? string.slice(0, trimmedEndIndex(string) + 1).replace(reTrimStart, '')
+      : string;
+  }
+
+  /**
    * The base implementation of `_.unary` without support for storing metadata.
    *
    * @private
@@ -1436,6 +1477,21 @@ var lodash = createCommonjsModule(function (module, exports) {
     return hasUnicode(string)
       ? unicodeToArray(string)
       : asciiToArray(string);
+  }
+
+  /**
+   * Used by `_.trim` and `_.trimEnd` to get the index of the last non-whitespace
+   * character of `string`.
+   *
+   * @private
+   * @param {string} string The string to inspect.
+   * @returns {number} Returns the index of the last non-whitespace character.
+   */
+  function trimmedEndIndex(string) {
+    var index = string.length;
+
+    while (index-- && reWhitespace.test(string.charAt(index))) {}
+    return index;
   }
 
   /**
@@ -3831,8 +3887,21 @@ var lodash = createCommonjsModule(function (module, exports) {
      * @returns {Array} Returns the new sorted array.
      */
     function baseOrderBy(collection, iteratees, orders) {
+      if (iteratees.length) {
+        iteratees = arrayMap(iteratees, function(iteratee) {
+          if (isArray(iteratee)) {
+            return function(value) {
+              return baseGet(value, iteratee.length === 1 ? iteratee[0] : iteratee);
+            }
+          }
+          return iteratee;
+        });
+      } else {
+        iteratees = [identity];
+      }
+
       var index = -1;
-      iteratees = arrayMap(iteratees.length ? iteratees : [identity], baseUnary(getIteratee()));
+      iteratees = arrayMap(iteratees, baseUnary(getIteratee()));
 
       var result = baseMap(collection, function(value, key, collection) {
         var criteria = arrayMap(iteratees, function(iteratee) {
@@ -4089,6 +4158,10 @@ var lodash = createCommonjsModule(function (module, exports) {
         var key = toKey(path[index]),
             newValue = value;
 
+        if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+          return object;
+        }
+
         if (index != lastIndex) {
           var objValue = nested[key];
           newValue = customizer ? customizer(objValue, key, nested) : undefined$1;
@@ -4241,11 +4314,14 @@ var lodash = createCommonjsModule(function (module, exports) {
      *  into `array`.
      */
     function baseSortedIndexBy(array, value, iteratee, retHighest) {
-      value = iteratee(value);
-
       var low = 0,
-          high = array == null ? 0 : array.length,
-          valIsNaN = value !== value,
+          high = array == null ? 0 : array.length;
+      if (high === 0) {
+        return 0;
+      }
+
+      value = iteratee(value);
+      var valIsNaN = value !== value,
           valIsNull = value === null,
           valIsSymbol = isSymbol(value),
           valIsUndefined = value === undefined$1;
@@ -5730,10 +5806,11 @@ var lodash = createCommonjsModule(function (module, exports) {
       if (arrLength != othLength && !(isPartial && othLength > arrLength)) {
         return false;
       }
-      // Assume cyclic values are equal.
-      var stacked = stack.get(array);
-      if (stacked && stack.get(other)) {
-        return stacked == other;
+      // Check that cyclic values are equal.
+      var arrStacked = stack.get(array);
+      var othStacked = stack.get(other);
+      if (arrStacked && othStacked) {
+        return arrStacked == other && othStacked == array;
       }
       var index = -1,
           result = true,
@@ -5895,10 +5972,11 @@ var lodash = createCommonjsModule(function (module, exports) {
           return false;
         }
       }
-      // Assume cyclic values are equal.
-      var stacked = stack.get(object);
-      if (stacked && stack.get(other)) {
-        return stacked == other;
+      // Check that cyclic values are equal.
+      var objStacked = stack.get(object);
+      var othStacked = stack.get(other);
+      if (objStacked && othStacked) {
+        return objStacked == other && othStacked == object;
       }
       var result = true;
       stack.set(object, other);
@@ -9279,6 +9357,10 @@ var lodash = createCommonjsModule(function (module, exports) {
      * // The `_.property` iteratee shorthand.
      * _.filter(users, 'active');
      * // => objects for ['barney']
+     *
+     * // Combining several predicates using `_.overEvery` or `_.overSome`.
+     * _.filter(users, _.overSome([{ 'age': 36 }, ['age', 40]]));
+     * // => objects for ['fred', 'barney']
      */
     function filter(collection, predicate) {
       var func = isArray(collection) ? arrayFilter : baseFilter;
@@ -10028,15 +10110,15 @@ var lodash = createCommonjsModule(function (module, exports) {
      * var users = [
      *   { 'user': 'fred',   'age': 48 },
      *   { 'user': 'barney', 'age': 36 },
-     *   { 'user': 'fred',   'age': 40 },
+     *   { 'user': 'fred',   'age': 30 },
      *   { 'user': 'barney', 'age': 34 }
      * ];
      *
      * _.sortBy(users, [function(o) { return o.user; }]);
-     * // => objects for [['barney', 36], ['barney', 34], ['fred', 48], ['fred', 40]]
+     * // => objects for [['barney', 36], ['barney', 34], ['fred', 48], ['fred', 30]]
      *
      * _.sortBy(users, ['user', 'age']);
-     * // => objects for [['barney', 34], ['barney', 36], ['fred', 40], ['fred', 48]]
+     * // => objects for [['barney', 34], ['barney', 36], ['fred', 30], ['fred', 48]]
      */
     var sortBy = baseRest(function(collection, iteratees) {
       if (collection == null) {
@@ -12580,7 +12662,7 @@ var lodash = createCommonjsModule(function (module, exports) {
       if (typeof value != 'string') {
         return value === 0 ? value : +value;
       }
-      value = value.replace(reTrim, '');
+      value = baseTrim(value);
       var isBinary = reIsBinary.test(value);
       return (isBinary || reIsOctal.test(value))
         ? freeParseInt(value.slice(2), isBinary ? 2 : 8)
@@ -14911,11 +14993,11 @@ var lodash = createCommonjsModule(function (module, exports) {
 
       // Use a sourceURL for easier debugging.
       // The sourceURL gets injected into the source that's eval-ed, so be careful
-      // with lookup (in case of e.g. prototype pollution), and strip newlines if any.
-      // A newline wouldn't be a valid sourceURL anyway, and it'd enable code injection.
+      // to normalize all kinds of whitespace, so e.g. newlines (and unicode versions of it) can't sneak in
+      // and escape the comment, thus injecting code that gets evaled.
       var sourceURL = '//# sourceURL=' +
         (hasOwnProperty.call(options, 'sourceURL')
-          ? (options.sourceURL + '').replace(/[\r\n]/g, ' ')
+          ? (options.sourceURL + '').replace(/\s/g, ' ')
           : ('lodash.templateSources[' + (++templateCounter) + ']')
         ) + '\n';
 
@@ -14948,12 +15030,16 @@ var lodash = createCommonjsModule(function (module, exports) {
 
       // If `variable` is not specified wrap a with-statement around the generated
       // code to add the data object to the top of the scope chain.
-      // Like with sourceURL, we take care to not check the option's prototype,
-      // as this configuration is a code injection vector.
       var variable = hasOwnProperty.call(options, 'variable') && options.variable;
       if (!variable) {
         source = 'with (obj) {\n' + source + '\n}\n';
       }
+      // Throw an error if a forbidden character was found in `variable`, to prevent
+      // potential command injection attacks.
+      else if (reForbiddenIdentifierChars.test(variable)) {
+        throw new Error(INVALID_TEMPL_VAR_ERROR_TEXT);
+      }
+
       // Cleanup code by stripping empty strings.
       source = (isEvaluating ? source.replace(reEmptyStringLeading, '') : source)
         .replace(reEmptyStringMiddle, '$1')
@@ -15067,7 +15153,7 @@ var lodash = createCommonjsModule(function (module, exports) {
     function trim(string, chars, guard) {
       string = toString(string);
       if (string && (guard || chars === undefined$1)) {
-        return string.replace(reTrim, '');
+        return baseTrim(string);
       }
       if (!string || !(chars = baseToString(chars))) {
         return string;
@@ -15102,7 +15188,7 @@ var lodash = createCommonjsModule(function (module, exports) {
     function trimEnd(string, chars, guard) {
       string = toString(string);
       if (string && (guard || chars === undefined$1)) {
-        return string.replace(reTrimEnd, '');
+        return string.slice(0, trimmedEndIndex(string) + 1);
       }
       if (!string || !(chars = baseToString(chars))) {
         return string;
@@ -15656,6 +15742,9 @@ var lodash = createCommonjsModule(function (module, exports) {
      * values against any array or object value, respectively. See `_.isEqual`
      * for a list of supported value comparisons.
      *
+     * **Note:** Multiple values can be checked by combining several matchers
+     * using `_.overSome`
+     *
      * @static
      * @memberOf _
      * @since 3.0.0
@@ -15671,6 +15760,10 @@ var lodash = createCommonjsModule(function (module, exports) {
      *
      * _.filter(objects, _.matches({ 'a': 4, 'c': 6 }));
      * // => [{ 'a': 4, 'b': 5, 'c': 6 }]
+     *
+     * // Checking for several possible values
+     * _.filter(objects, _.overSome([_.matches({ 'a': 1 }), _.matches({ 'a': 4 })]));
+     * // => [{ 'a': 1, 'b': 2, 'c': 3 }, { 'a': 4, 'b': 5, 'c': 6 }]
      */
     function matches(source) {
       return baseMatches(baseClone(source, CLONE_DEEP_FLAG));
@@ -15684,6 +15777,9 @@ var lodash = createCommonjsModule(function (module, exports) {
      * **Note:** Partial comparisons will match empty array and empty object
      * `srcValue` values against any array or object value, respectively. See
      * `_.isEqual` for a list of supported value comparisons.
+     *
+     * **Note:** Multiple values can be checked by combining several matchers
+     * using `_.overSome`
      *
      * @static
      * @memberOf _
@@ -15701,6 +15797,10 @@ var lodash = createCommonjsModule(function (module, exports) {
      *
      * _.find(objects, _.matchesProperty('a', 4));
      * // => { 'a': 4, 'b': 5, 'c': 6 }
+     *
+     * // Checking for several possible values
+     * _.filter(objects, _.overSome([_.matchesProperty('a', 1), _.matchesProperty('a', 4)]));
+     * // => [{ 'a': 1, 'b': 2, 'c': 3 }, { 'a': 4, 'b': 5, 'c': 6 }]
      */
     function matchesProperty(path, srcValue) {
       return baseMatchesProperty(path, baseClone(srcValue, CLONE_DEEP_FLAG));
@@ -15924,6 +16024,10 @@ var lodash = createCommonjsModule(function (module, exports) {
      * Creates a function that checks if **all** of the `predicates` return
      * truthy when invoked with the arguments it receives.
      *
+     * Following shorthands are possible for providing predicates.
+     * Pass an `Object` and it will be used as an parameter for `_.matches` to create the predicate.
+     * Pass an `Array` of parameters for `_.matchesProperty` and the predicate will be created using them.
+     *
      * @static
      * @memberOf _
      * @since 4.0.0
@@ -15950,6 +16054,10 @@ var lodash = createCommonjsModule(function (module, exports) {
      * Creates a function that checks if **any** of the `predicates` return
      * truthy when invoked with the arguments it receives.
      *
+     * Following shorthands are possible for providing predicates.
+     * Pass an `Object` and it will be used as an parameter for `_.matches` to create the predicate.
+     * Pass an `Array` of parameters for `_.matchesProperty` and the predicate will be created using them.
+     *
      * @static
      * @memberOf _
      * @since 4.0.0
@@ -15969,6 +16077,9 @@ var lodash = createCommonjsModule(function (module, exports) {
      *
      * func(NaN);
      * // => false
+     *
+     * var matchesFunc = _.overSome([{ 'a': 1 }, { 'a': 2 }])
+     * var matchesPropertyFunc = _.overSome([['a', 1], ['a', 2]])
      */
     var overSome = createOver(arraySome);
 
@@ -17210,40 +17321,6 @@ var lodash = createCommonjsModule(function (module, exports) {
 }.call(commonjsGlobal));
 });
 
-var handler = {
-  get: function get(target, prop) {
-    if (prop === '__GET_TARGET__') {
-      return target;
-    }
-
-    var value = '';
-
-    var model = lodash.get(target, prop);
-
-    if (!lodash.isUndefined(model)) {
-      value = lodash.isObject(model) ? model["default"] : model;
-    }
-
-    return value;
-  },
-  set: function set(target, property, value) {
-    var model = lodash.get(target, property);
-
-    if (lodash.isObject(model)) {
-      value = _objectSpread2({}, model, {
-        "default": value || ''
-      });
-    }
-
-    target[property] = value;
-    return true;
-  }
-};
-
-var baseProxy = function baseProxy(state) {
-  return new Proxy(state || {}, handler);
-};
-
 var rules = function rules(ruleName) {
   return {
     valid: function valid(item) {
@@ -17309,645 +17386,57 @@ var validateField = function validateField(item) {
   return errors;
 };
 
-function _process (v, mod) {
-  var i;
-  var r;
-
-  if (typeof mod === 'function') {
-    r = mod(v);
-    if (r !== undefined) {
-      v = r;
-    }
-  } else if (Array.isArray(mod)) {
-    for (i = 0; i < mod.length; i++) {
-      r = mod[i](v);
-      if (r !== undefined) {
-        v = r;
-      }
-    }
-  }
-
-  return v
-}
-
-function parseKey (key, val) {
-  // detect negative index notation
-  if (key[0] === '-' && Array.isArray(val) && /^-\d+$/.test(key)) {
-    return val.length + parseInt(key, 10)
-  }
-  return key
-}
-
-function isIndex (k) {
-  return /^\d+$/.test(k)
-}
-
-function isObject (val) {
-  return Object.prototype.toString.call(val) === '[object Object]'
-}
-
-function isArrayOrObject (val) {
-  return Object(val) === val
-}
-
-function isEmptyObject (val) {
-  return Object.keys(val).length === 0
-}
-
-var blacklist = ['__proto__', 'prototype', 'constructor'];
-var blacklistFilter = function (part) { return blacklist.indexOf(part) === -1 };
-
-function parsePath (path, sep) {
-  if (path.indexOf('[') >= 0) {
-    path = path.replace(/\[/g, '.').replace(/]/g, '');
-  }
-
-  var parts = path.split(sep);
-
-  var check = parts.filter(blacklistFilter);
-
-  if (check.length !== parts.length) {
-    throw Error('Refusing to update blacklisted property ' + path)
-  }
-
-  return parts
-}
-
-var hasOwnProperty = Object.prototype.hasOwnProperty;
-
-function DotObject (separator, override, useArray, useBrackets) {
-  if (!(this instanceof DotObject)) {
-    return new DotObject(separator, override, useArray, useBrackets)
-  }
-
-  if (typeof override === 'undefined') override = false;
-  if (typeof useArray === 'undefined') useArray = true;
-  if (typeof useBrackets === 'undefined') useBrackets = true;
-  this.separator = separator || '.';
-  this.override = override;
-  this.useArray = useArray;
-  this.useBrackets = useBrackets;
-  this.keepArray = false;
-
-  // contains touched arrays
-  this.cleanup = [];
-}
-
-var dotDefault = new DotObject('.', false, true, true);
-function wrap (method) {
-  return function () {
-    return dotDefault[method].apply(dotDefault, arguments)
-  }
-}
-
-DotObject.prototype._fill = function (a, obj, v, mod) {
-  var k = a.shift();
-
-  if (a.length > 0) {
-    obj[k] = obj[k] || (this.useArray && isIndex(a[0]) ? [] : {});
-
-    if (!isArrayOrObject(obj[k])) {
-      if (this.override) {
-        obj[k] = {};
-      } else {
-        if (!(isArrayOrObject(v) && isEmptyObject(v))) {
-          throw new Error(
-            'Trying to redefine `' + k + '` which is a ' + typeof obj[k]
-          )
-        }
-
-        return
-      }
-    }
-
-    this._fill(a, obj[k], v, mod);
-  } else {
-    if (!this.override && isArrayOrObject(obj[k]) && !isEmptyObject(obj[k])) {
-      if (!(isArrayOrObject(v) && isEmptyObject(v))) {
-        throw new Error("Trying to redefine non-empty obj['" + k + "']")
-      }
-
-      return
-    }
-
-    obj[k] = _process(v, mod);
-  }
-};
-
-/**
- *
- * Converts an object with dotted-key/value pairs to it's expanded version
- *
- * Optionally transformed by a set of modifiers.
- *
- * Usage:
- *
- *   var row = {
- *     'nr': 200,
- *     'doc.name': '  My Document  '
- *   }
- *
- *   var mods = {
- *     'doc.name': [_s.trim, _s.underscored]
- *   }
- *
- *   dot.object(row, mods)
- *
- * @param {Object} obj
- * @param {Object} mods
- */
-DotObject.prototype.object = function (obj, mods) {
-  var self = this;
-
-  Object.keys(obj).forEach(function (k) {
-    var mod = mods === undefined ? null : mods[k];
-    // normalize array notation.
-    var ok = parsePath(k, self.separator).join(self.separator);
-
-    if (ok.indexOf(self.separator) !== -1) {
-      self._fill(ok.split(self.separator), obj, obj[k], mod);
-      delete obj[k];
-    } else {
-      obj[k] = _process(obj[k], mod);
-    }
-  });
-
-  return obj
-};
-
-/**
- * @param {String} path dotted path
- * @param {String} v value to be set
- * @param {Object} obj object to be modified
- * @param {Function|Array} mod optional modifier
- */
-DotObject.prototype.str = function (path, v, obj, mod) {
-  var ok = parsePath(path, this.separator).join(this.separator);
-
-  if (path.indexOf(this.separator) !== -1) {
-    this._fill(ok.split(this.separator), obj, v, mod);
-  } else {
-    obj[path] = _process(v, mod);
-  }
-
-  return obj
-};
-
-/**
- *
- * Pick a value from an object using dot notation.
- *
- * Optionally remove the value
- *
- * @param {String} path
- * @param {Object} obj
- * @param {Boolean} remove
- */
-DotObject.prototype.pick = function (path, obj, remove, reindexArray) {
-  var i;
-  var keys;
-  var val;
-  var key;
-  var cp;
-
-  keys = parsePath(path, this.separator);
-  for (i = 0; i < keys.length; i++) {
-    key = parseKey(keys[i], obj);
-    if (obj && typeof obj === 'object' && key in obj) {
-      if (i === keys.length - 1) {
-        if (remove) {
-          val = obj[key];
-          if (reindexArray && Array.isArray(obj)) {
-            obj.splice(key, 1);
-          } else {
-            delete obj[key];
-          }
-          if (Array.isArray(obj)) {
-            cp = keys.slice(0, -1).join('.');
-            if (this.cleanup.indexOf(cp) === -1) {
-              this.cleanup.push(cp);
-            }
-          }
-          return val
-        } else {
-          return obj[key]
-        }
-      } else {
-        obj = obj[key];
-      }
-    } else {
-      return undefined
-    }
-  }
-  if (remove && Array.isArray(obj)) {
-    obj = obj.filter(function (n) {
-      return n !== undefined
-    });
-  }
-  return obj
-};
-/**
- *
- * Delete value from an object using dot notation.
- *
- * @param {String} path
- * @param {Object} obj
- * @return {any} The removed value
- */
-DotObject.prototype.delete = function (path, obj) {
-  return this.remove(path, obj, true)
-};
-
-/**
- *
- * Remove value from an object using dot notation.
- *
- * Will remove multiple items if path is an array.
- * In this case array indexes will be retained until all
- * removals have been processed.
- *
- * Use dot.delete() to automatically  re-index arrays.
- *
- * @param {String|Array<String>} path
- * @param {Object} obj
- * @param {Boolean} reindexArray
- * @return {any} The removed value
- */
-DotObject.prototype.remove = function (path, obj, reindexArray) {
-  var i;
-
-  this.cleanup = [];
-  if (Array.isArray(path)) {
-    for (i = 0; i < path.length; i++) {
-      this.pick(path[i], obj, true, reindexArray);
-    }
-    if (!reindexArray) {
-      this._cleanup(obj);
-    }
-    return obj
-  } else {
-    return this.pick(path, obj, true, reindexArray)
-  }
-};
-
-DotObject.prototype._cleanup = function (obj) {
-  var ret;
-  var i;
-  var keys;
-  var root;
-  if (this.cleanup.length) {
-    for (i = 0; i < this.cleanup.length; i++) {
-      keys = this.cleanup[i].split('.');
-      root = keys.splice(0, -1).join('.');
-      ret = root ? this.pick(root, obj) : obj;
-      ret = ret[keys[0]].filter(function (v) {
-        return v !== undefined
-      });
-      this.set(this.cleanup[i], ret, obj);
-    }
-    this.cleanup = [];
-  }
-};
-
-/**
- * Alias method  for `dot.remove`
- *
- * Note: this is not an alias for dot.delete()
- *
- * @param {String|Array<String>} path
- * @param {Object} obj
- * @param {Boolean} reindexArray
- * @return {any} The removed value
- */
-DotObject.prototype.del = DotObject.prototype.remove;
-
-/**
- *
- * Move a property from one place to the other.
- *
- * If the source path does not exist (undefined)
- * the target property will not be set.
- *
- * @param {String} source
- * @param {String} target
- * @param {Object} obj
- * @param {Function|Array} mods
- * @param {Boolean} merge
- */
-DotObject.prototype.move = function (source, target, obj, mods, merge) {
-  if (typeof mods === 'function' || Array.isArray(mods)) {
-    this.set(target, _process(this.pick(source, obj, true), mods), obj, merge);
-  } else {
-    merge = mods;
-    this.set(target, this.pick(source, obj, true), obj, merge);
-  }
-
-  return obj
-};
-
-/**
- *
- * Transfer a property from one object to another object.
- *
- * If the source path does not exist (undefined)
- * the property on the other object will not be set.
- *
- * @param {String} source
- * @param {String} target
- * @param {Object} obj1
- * @param {Object} obj2
- * @param {Function|Array} mods
- * @param {Boolean} merge
- */
-DotObject.prototype.transfer = function (
-  source,
-  target,
-  obj1,
-  obj2,
-  mods,
-  merge
-) {
-  if (typeof mods === 'function' || Array.isArray(mods)) {
-    this.set(
-      target,
-      _process(this.pick(source, obj1, true), mods),
-      obj2,
-      merge
-    );
-  } else {
-    merge = mods;
-    this.set(target, this.pick(source, obj1, true), obj2, merge);
-  }
-
-  return obj2
-};
-
-/**
- *
- * Copy a property from one object to another object.
- *
- * If the source path does not exist (undefined)
- * the property on the other object will not be set.
- *
- * @param {String} source
- * @param {String} target
- * @param {Object} obj1
- * @param {Object} obj2
- * @param {Function|Array} mods
- * @param {Boolean} merge
- */
-DotObject.prototype.copy = function (source, target, obj1, obj2, mods, merge) {
-  if (typeof mods === 'function' || Array.isArray(mods)) {
-    this.set(
-      target,
-      _process(
-        // clone what is picked
-        JSON.parse(JSON.stringify(this.pick(source, obj1, false))),
-        mods
-      ),
-      obj2,
-      merge
-    );
-  } else {
-    merge = mods;
-    this.set(target, this.pick(source, obj1, false), obj2, merge);
-  }
-
-  return obj2
-};
-
-/**
- *
- * Set a property on an object using dot notation.
- *
- * @param {String} path
- * @param {any} val
- * @param {Object} obj
- * @param {Boolean} merge
- */
-DotObject.prototype.set = function (path, val, obj, merge) {
-  var i;
-  var k;
-  var keys;
-  var key;
-
-  // Do not operate if the value is undefined.
-  if (typeof val === 'undefined') {
-    return obj
-  }
-  keys = parsePath(path, this.separator);
-
-  for (i = 0; i < keys.length; i++) {
-    key = keys[i];
-    if (i === keys.length - 1) {
-      if (merge && isObject(val) && isObject(obj[key])) {
-        for (k in val) {
-          if (hasOwnProperty.call(val, k)) {
-            obj[key][k] = val[k];
-          }
-        }
-      } else if (merge && Array.isArray(obj[key]) && Array.isArray(val)) {
-        for (var j = 0; j < val.length; j++) {
-          obj[keys[i]].push(val[j]);
-        }
-      } else {
-        obj[key] = val;
-      }
-    } else if (
-      // force the value to be an object
-      !hasOwnProperty.call(obj, key) ||
-      (!isObject(obj[key]) && !Array.isArray(obj[key]))
-    ) {
-      // initialize as array if next key is numeric
-      if (/^\d+$/.test(keys[i + 1])) {
-        obj[key] = [];
-      } else {
-        obj[key] = {};
-      }
-    }
-    obj = obj[key];
-  }
-  return obj
-};
-
-/**
- *
- * Transform an object
- *
- * Usage:
- *
- *   var obj = {
- *     "id": 1,
- *    "some": {
- *      "thing": "else"
- *    }
- *   }
- *
- *   var transform = {
- *     "id": "nr",
- *    "some.thing": "name"
- *   }
- *
- *   var tgt = dot.transform(transform, obj)
- *
- * @param {Object} recipe Transform recipe
- * @param {Object} obj Object to be transformed
- * @param {Array} mods modifiers for the target
- */
-DotObject.prototype.transform = function (recipe, obj, tgt) {
-  obj = obj || {};
-  tgt = tgt || {};
-  Object.keys(recipe).forEach(
-    function (key) {
-      this.set(recipe[key], this.pick(key, obj), tgt);
-    }.bind(this)
-  );
-  return tgt
-};
-
-/**
- *
- * Convert object to dotted-key/value pair
- *
- * Usage:
- *
- *   var tgt = dot.dot(obj)
- *
- *   or
- *
- *   var tgt = {}
- *   dot.dot(obj, tgt)
- *
- * @param {Object} obj source object
- * @param {Object} tgt target object
- * @param {Array} path path array (internal)
- */
-DotObject.prototype.dot = function (obj, tgt, path) {
-  tgt = tgt || {};
-  path = path || [];
-  var isArray = Array.isArray(obj);
-
-  Object.keys(obj).forEach(
-    function (key) {
-      var index = isArray && this.useBrackets ? '[' + key + ']' : key;
-      if (
-        isArrayOrObject(obj[key]) &&
-        ((isObject(obj[key]) && !isEmptyObject(obj[key])) ||
-          (Array.isArray(obj[key]) && !this.keepArray && obj[key].length !== 0))
-      ) {
-        if (isArray && this.useBrackets) {
-          var previousKey = path[path.length - 1] || '';
-          return this.dot(
-            obj[key],
-            tgt,
-            path.slice(0, -1).concat(previousKey + index)
-          )
-        } else {
-          return this.dot(obj[key], tgt, path.concat(index))
-        }
-      } else {
-        if (isArray && this.useBrackets) {
-          tgt[path.join(this.separator).concat('[' + key + ']')] = obj[key];
-        } else {
-          tgt[path.concat(index).join(this.separator)] = obj[key];
-        }
-      }
-    }.bind(this)
-  );
-  return tgt
-};
-
-DotObject.pick = wrap('pick');
-DotObject.move = wrap('move');
-DotObject.transfer = wrap('transfer');
-DotObject.transform = wrap('transform');
-DotObject.copy = wrap('copy');
-DotObject.object = wrap('object');
-DotObject.str = wrap('str');
-DotObject.set = wrap('set');
-DotObject.delete = wrap('delete');
-DotObject.del = DotObject.remove = wrap('remove');
-DotObject.dot = wrap('dot');
-['override', 'overwrite'].forEach(function (prop) {
-  Object.defineProperty(DotObject, prop, {
-    get: function () {
-      return dotDefault.override
-    },
-    set: function (val) {
-      dotDefault.override = !!val;
-    }
-  });
-});
-['useArray', 'keepArray', 'useBrackets'].forEach(function (prop) {
-  Object.defineProperty(DotObject, prop, {
-    get: function () {
-      return dotDefault[prop]
-    },
-    set: function (val) {
-      dotDefault[prop] = val;
-    }
-  });
-});
-
-DotObject._process = _process;
-
-var dotObject = DotObject;
-
 function useSimpleFormState(config) {
-  var setState = function setState(prop) {
+  var _useState = react.useState(null),
+      _useState2 = _slicedToArray(_useState, 2),
+      baseModel = _useState2[0],
+      setBaseModel = _useState2[1];
+
+  var _useState3 = react.useState({}),
+      _useState4 = _slicedToArray(_useState3, 2),
+      errors = _useState4[0],
+      setErrors = _useState4[1];
+
+  var proxy = new Proxy({}, {
+    get: function get(target, prop) {
+      if (prop === 'GET_STATE') return baseModel;
+
+      var model = lodash.get(baseModel, prop);
+
+      if (lodash.isUndefined(model)) {
+        lodash.set(target, prop, '');
+
+        setBaseModel(_objectSpread2(_objectSpread2({}, baseModel), target));
+        return '';
+      }
+
+      return model;
+    },
+    set: function set(target, prop, value) {
+      lodash.set(target, prop, value);
+
+      setBaseModel(_objectSpread2(_objectSpread2({}, baseModel), target));
+      return true;
+    }
+  });
+  var set = react.useCallback(function (prop) {
     var value = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : '';
 
     if (lodash.isString(prop)) {
-      baseModel[prop] = value;
+      var model = _objectSpread2({}, baseModel);
+
+      lodash.set(model, prop, value);
+
+      setBaseModel(model);
     }
 
     if (lodash.isObject(prop)) {
-      Object.entries(prop).forEach(function (item) {
-        var _item = _slicedToArray(item, 2),
-            key = _item[0],
-            value = _item[1];
-
-        baseModel[key] = value;
-      });
+      setBaseModel(prop);
     }
-
-    setData(_getStateValues(baseModel.__GET_TARGET__));
-  };
-
-  var validate = function validate() {
-    var name = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : '';
-
-    if (!name) {
-      return _validateAll(config);
-    }
-
-    return _validateItem(name, config);
-  };
-
-  var _getState = function _getState() {
-    return dotObject.object(_objectSpread2({}, data));
-  };
+  }, []);
 
   var _getErrors = function _getErrors() {
     return errors;
-  };
-
-  var _getStateValues = function _getStateValues(state) {
-    var stateValues = {};
-    Object.entries(state).forEach(function (item) {
-      var _item2 = _slicedToArray(item, 2),
-          key = _item2[0],
-          value = _item2[1];
-
-      if (lodash.isObject(value) && !lodash.isNil(value) && lodash.isNil(value["default"])) {
-        value = _getStateValues(value);
-      } else {
-        value = lodash.isObject(value) ? value["default"] : value;
-      }
-
-      stateValues[key] = value;
-    });
-    return dotObject.dot(stateValues);
   };
 
   var _validateAll = function _validateAll(state) {
@@ -17962,7 +17451,7 @@ function useSimpleFormState(config) {
       var validationErrors = validateField(item);
 
       if (validationErrors.length) {
-        setErrors(_objectSpread2({}, errors, _defineProperty({}, name, validationErrors)));
+        setErrors(_objectSpread2(_objectSpread2({}, errors), {}, _defineProperty({}, name, validationErrors)));
       } else {
         delete errors[name];
         setErrors(_objectSpread2({}, errors));
@@ -17974,30 +17463,22 @@ function useSimpleFormState(config) {
     return [];
   };
 
-  var _useState = react.useState(baseProxy(config)),
-      _useState2 = _slicedToArray(_useState, 2),
-      baseModel = _useState2[0],
-      setBaseModel = _useState2[1];
+  var validate = function validate() {
+    var name = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : '';
 
-  var _useState3 = react.useState(_getStateValues(config)),
-      _useState4 = _slicedToArray(_useState3, 2),
-      data = _useState4[0],
-      setData = _useState4[1];
+    if (!name) {
+      return _validateAll(config);
+    }
 
-  var _useState5 = react.useState({}),
-      _useState6 = _slicedToArray(_useState5, 2),
-      errors = _useState6[0],
-      setErrors = _useState6[1];
+    return _validateItem(name, config);
+  };
 
-  return [baseModel, {
-    setState: setState,
+  return [proxy, set, {
+    state: baseModel,
     validate: validate,
-    state: _getState,
     errors: _getErrors
   }];
 }
-
-window.React1 = require('react');
 
 exports.useSimpleFormState = useSimpleFormState;
 //# sourceMappingURL=main.js.map
